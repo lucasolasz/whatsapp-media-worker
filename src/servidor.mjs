@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -11,6 +12,7 @@ import {
   registrarConversao,
   resumoConversao,
 } from "./conversoes.mjs";
+import { emMb, emSegundos, registrar, segundosDesde, velocidade } from "./log.mjs";
 import { verificarToken } from "./token.mjs";
 
 const MB = 1024 * 1024;
@@ -107,19 +109,19 @@ function validarDestino(destinoUrl) {
   return destinoUrl;
 }
 
-async function receberArquivo(requisicao, destino, limite) {
+/** `recebimento.bytes` acompanha o que chegou, para o log dizer onde um upload parou. */
+async function receberArquivo(requisicao, destino, limite, recebimento) {
   if (Number(requisicao.headers["content-length"]) > limite) {
     throw new ErroHttp(413, `Arquivo acima de ${Math.floor(limite / MB)} MB`);
   }
-  let recebidos = 0;
   requisicao.on("data", (pedaco) => {
-    recebidos += pedaco.length;
-    if (recebidos > limite) {
+    recebimento.bytes += pedaco.length;
+    if (recebimento.bytes > limite) {
       requisicao.destroy(new ErroHttp(413, `Arquivo acima de ${Math.floor(limite / MB)} MB`));
     }
   });
   await pipeline(requisicao, createWriteStream(destino));
-  if (!recebidos) throw new ErroHttp(400, "Arquivo vazio");
+  if (!recebimento.bytes) throw new ErroHttp(400, "Arquivo vazio");
 }
 
 async function criarConversao(requisicao, resposta) {
@@ -135,16 +137,38 @@ async function criarConversao(requisicao, resposta) {
   const limite = Math.min(TAMANHO_MAXIMO, token.tamanho_maximo ?? TAMANHO_MAXIMO);
   tokensUsados.set(token.jti, token.exp);
 
+  const id = randomUUID();
+  const declarados = Number(requisicao.headers["content-length"]);
+  const inicio = Date.now();
+  registrar(
+    id,
+    `upload iniciado: ${contentType}, ${emMb(declarados)} declarados, origem ${requisicao.headers.origin ?? "sem Origin"}`,
+  );
+
   const pasta = await mkdtemp(join(tmpdir(), "conversao-"));
   const entrada = join(pasta, "entrada");
+  const recebimento = { bytes: 0 };
   try {
-    await receberArquivo(requisicao, entrada, limite);
+    await receberArquivo(requisicao, entrada, limite, recebimento);
   } catch (erro) {
     await rm(pasta, { recursive: true, force: true });
-    throw erro;
+    if (erro instanceof ErroHttp) throw erro;
+    // Conexão caiu no meio (rede, proxy, aba fechada): não há a quem responder, só registrar onde parou.
+    registrar(
+      id,
+      `upload interrompido: ${emMb(recebimento.bytes)} de ${emMb(declarados)} em ${emSegundos(segundosDesde(inicio))} (${erro.code ?? erro.message})`,
+    );
+    return;
   }
 
+  const duracao = segundosDesde(inicio);
+  registrar(
+    id,
+    `upload recebido: ${emMb(recebimento.bytes)} em ${emSegundos(duracao)} (${velocidade(recebimento.bytes, duracao)})`,
+  );
+
   const conversao = registrarConversao({
+    id,
     jti: token.jti,
     pasta,
     entrada,
@@ -192,7 +216,11 @@ const servidor = createServer(async (requisicao, resposta) => {
       responder(resposta, 404, { error: "Não encontrado" });
     }
   } catch (erro) {
-    if (!(erro instanceof ErroHttp)) console.error("Erro inesperado:", erro);
+    if (erro instanceof ErroHttp) {
+      console.warn(`recusado ${requisicao.method} ${requisicao.url.split("?")[0]}: ${erro.status} ${erro.message}`);
+    } else {
+      console.error("Erro inesperado:", erro);
+    }
     // Upload acima do limite derruba a conexão: aí não há mais a quem responder.
     if (!resposta.headersSent && !requisicao.socket.destroyed) {
       responder(resposta, erro.status ?? 500, {

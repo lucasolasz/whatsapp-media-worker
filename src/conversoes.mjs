@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import { ErroMidia, converterMidia } from "./conversao.mjs";
+import { emMb, emSegundos, registrar, registrarFalha, segundosDesde } from "./log.mjs";
 
 const conversoes = new Map();
 
@@ -10,10 +10,11 @@ const conversoes = new Map();
  * como 404 no status, e quem chamou envia de novo.
  */
 let fila = Promise.resolve();
+let naFila = 0;
 
-export function registrarConversao({ jti, pasta, entrada, contentTypeEntrada, destinoUrl }) {
+export function registrarConversao({ id, jti, pasta, entrada, contentTypeEntrada, destinoUrl }) {
   const conversao = {
-    id: randomUUID(),
+    id,
     jti,
     pasta,
     destinoUrl,
@@ -22,7 +23,11 @@ export function registrarConversao({ jti, pasta, entrada, contentTypeEntrada, de
     criadaEm: Date.now(),
   };
   conversoes.set(conversao.id, conversao);
-  fila = fila.then(() => processar(conversao, entrada, contentTypeEntrada));
+  registrar(id, naFila ? `na fila: ${naFila} conversão(ões) à frente` : "na fila: nenhuma à frente");
+  naFila++;
+  fila = fila
+    .then(() => processar(conversao, entrada, contentTypeEntrada))
+    .finally(() => naFila--);
   return conversao;
 }
 
@@ -36,19 +41,49 @@ export function resumoConversao({ status, progresso, contentType, tamanho, erro 
   return { status, progresso, content_type: contentType, tamanho, erro };
 }
 
+/** Quartos do progresso que entram no log: conversão longa mostra que segue andando. */
+const MARCOS_PROGRESSO = [25, 50, 75];
+
 async function processar(conversao, entrada, contentTypeEntrada) {
+  const { id } = conversao;
   const inicio = Date.now();
+  let etapa = "conversão";
   try {
-    const resultado = await converterMidia(entrada, contentTypeEntrada, conversao.pasta, (progresso) => {
-      conversao.progresso = progresso;
-    });
+    const { size: tamanhoEntrada } = await stat(entrada);
+    registrar(id, `conversão iniciada: ${contentTypeEntrada}, ${emMb(tamanhoEntrada)}`);
+
+    const marcos = [...MARCOS_PROGRESSO];
+    const resultado = await converterMidia(
+      entrada,
+      contentTypeEntrada,
+      conversao.pasta,
+      (progresso) => {
+        conversao.progresso = progresso;
+        while (marcos.length && progresso >= marcos[0]) {
+          registrar(id, `convertendo: ${marcos.shift()}%`);
+        }
+      },
+      (mensagem) => registrar(id, mensagem),
+    );
     await rm(entrada, { force: true });
 
+    const reducao = Math.round((1 - resultado.tamanho / tamanhoEntrada) * 100);
+    registrar(
+      id,
+      `conversão concluída: ${resultado.contentType}, ${emMb(resultado.tamanho)} (${reducao >= 0 ? "-" : "+"}${Math.abs(reducao)}%) em ${emSegundos(segundosDesde(inicio))}`,
+    );
+
     if (conversao.destinoUrl) {
+      etapa = "gravação no destino";
+      const inicioEnvio = Date.now();
+      const host = new URL(conversao.destinoUrl).host;
+      registrar(id, `gravando no destino ${host}`);
       await enviarAoDestino(conversao.destinoUrl, resultado);
+      registrar(id, `gravado no destino ${host} em ${emSegundos(segundosDesde(inicioEnvio))}`);
       await rm(conversao.pasta, { recursive: true, force: true });
     } else {
       conversao.caminho = resultado.caminho;
+      registrar(id, "aguardando download");
     }
 
     Object.assign(conversao, {
@@ -57,9 +92,9 @@ async function processar(conversao, entrada, contentTypeEntrada) {
       contentType: resultado.contentType,
       tamanho: resultado.tamanho,
     });
-    console.info(`[conversao ${conversao.id}] pronta em ${Math.round((Date.now() - inicio) / 1000)} s`);
+    registrar(id, `pronta em ${emSegundos(segundosDesde(inicio))}`);
   } catch (erro) {
-    console.error(`[conversao ${conversao.id}] falha:`, erro);
+    registrarFalha(id, `falha na ${etapa} após ${emSegundos(segundosDesde(inicio))}:`, erro);
     Object.assign(conversao, {
       status: "erro",
       erro:

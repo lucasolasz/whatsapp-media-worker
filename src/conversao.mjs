@@ -44,14 +44,15 @@ export function contentTypeDeSaida(contentTypeEntrada) {
 /**
  * Converte para o formato do WhatsApp dentro de `pasta`.
  * `aoProgredir` recebe 0–100 durante o vídeo; imagem é rápida demais para isso.
+ * `aoInformar` recebe o que foi lido da entrada e os parâmetros escolhidos, para o log.
  */
-export async function converterMidia(entrada, contentTypeEntrada, pasta, aoProgredir) {
+export async function converterMidia(entrada, contentTypeEntrada, pasta, aoProgredir, aoInformar = () => {}) {
   const contentType = contentTypeDeSaida(contentTypeEntrada);
   const ehVideo = contentType === "video/mp4";
   const caminho = join(pasta, ehVideo ? "saida.mp4" : "saida.jpg");
 
-  if (ehVideo) await converterVideo(entrada, caminho, aoProgredir);
-  else await converterImagem(entrada, caminho);
+  if (ehVideo) await converterVideo(entrada, caminho, aoProgredir, aoInformar);
+  else await converterImagem(entrada, caminho, aoInformar);
 
   const { size } = await stat(caminho);
   const limite = ehVideo ? VIDEO.limiteBytes : IMAGEM.limiteBytes;
@@ -64,8 +65,10 @@ export async function converterMidia(entrada, contentTypeEntrada, pasta, aoProgr
   return { caminho, contentType, tamanho: size };
 }
 
-async function converterImagem(entrada, saida) {
+async function converterImagem(entrada, saida, aoInformar) {
   try {
+    const { format, width, height } = await sharp(entrada).metadata();
+    aoInformar(`imagem de entrada: ${format}, ${width}x${height}`);
     await sharp(entrada)
       // Aplica a orientação EXIF: sem isso foto de celular chega deitada.
       .rotate()
@@ -90,11 +93,14 @@ async function converterImagem(entrada, saida) {
  * H.264 + AAC é o único formato que o WhatsApp toca em todo aparelho (vídeo de
  * iPhone vem em HEVC). O bitrate sai da duração para o arquivo caber nos 16 MB.
  */
-async function converterVideo(entrada, saida, aoProgredir) {
-  const duracao = await duracaoSegundos(entrada);
+async function converterVideo(entrada, saida, aoProgredir, aoInformar) {
+  const { duracao, largura, altura, codec } = await lerVideo(entrada);
   const bitrate = Math.min(
     VIDEO.bitrateMaximo,
     Math.floor((VIDEO.alvoBytes * 8) / duracao - VIDEO.bitrateAudio),
+  );
+  aoInformar(
+    `vídeo de entrada: ${codec ?? "codec ?"}, ${largura ?? "?"}x${altura ?? "?"}, ${duracao.toFixed(1)} s; saída até ${VIDEO.lado} px a ${(bitrate / 1e6).toFixed(2)} Mbps`,
   );
 
   if (bitrate < VIDEO.bitrateMinimo) {
@@ -129,11 +135,12 @@ async function converterVideo(entrada, saida, aoProgredir) {
   );
 }
 
-async function duracaoSegundos(arquivo) {
+async function lerVideo(arquivo) {
   const saida = await executar("ffprobe", [
     "-v", "error",
-    "-show_entries", "format=duration",
-    "-of", "default=noprint_wrappers=1:nokey=1",
+    "-select_streams", "v:0",
+    "-show_entries", "format=duration:stream=width,height,codec_name",
+    "-of", "json",
     arquivo,
   ]).catch((erro) => {
     throw new ErroMidia("Não foi possível ler o vídeo. O arquivo pode estar corrompido", {
@@ -141,11 +148,18 @@ async function duracaoSegundos(arquivo) {
     });
   });
 
-  const duracao = Number.parseFloat(saida);
+  let dados = {};
+  try {
+    dados = JSON.parse(saida);
+  } catch {
+    // Saída inesperada do ffprobe cai na checagem da duração logo abaixo.
+  }
+  const duracao = Number.parseFloat(dados.format?.duration);
   if (!(duracao > 0)) {
     throw new ErroMidia("Não foi possível ler a duração do vídeo");
   }
-  return duracao;
+  const [video] = dados.streams ?? [];
+  return { duracao, largura: video?.width, altura: video?.height, codec: video?.codec_name };
 }
 
 /** Roda sem shell (argumentos não passam por interpretação) e guarda só o fim do stderr para o log. */

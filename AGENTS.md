@@ -51,7 +51,7 @@ Sempre atualizar o `README.md`.
 - `destino_url` vem dentro do token assinado. `DESTINOS_PERMITIDOS` é a segunda barreira contra SSRF; vazio desliga o modo destino.
 - CORS só ecoa origens de `CORS_ORIGENS`.
 - `CORS_ORIGENS` e `DESTINOS_PERMITIDOS` são normalizados ao subir (`paraOrigem` e `paraHost` em `servidor.mjs`), porque `https://` ou `/` no final já quebraram a configuração. Valor que não dá para interpretar derruba a subida com a variável e o valor no log. A recusa de destino informa o host recusado.
-- **Logs:** só id da conversão, tempos e o fim do stderr do ffmpeg. Nunca token, segredo, `destino_url` (tem assinatura) nem conteúdo de arquivo.
+- **Logs:** uma linha por etapa (`src/log.mjs`), sempre com os 8 primeiros caracteres do id da conversão: upload iniciado (tipo, tamanho declarado, `Origin`), recebido (tamanho, tempo, MB/s) ou interrompido (quanto chegou do total), recusas HTTP, fila, dados da entrada e parâmetros escolhidos, marcos de 25/50/75%, conversão concluída (tamanho e redução), gravação no destino (só o host) e falha com a etapa. A consulta de status não loga (ruído a cada 2 s). Do ffmpeg, só o fim do stderr. Nunca token, segredo, `destino_url` (tem assinatura) nem conteúdo de arquivo.
 - Respostas de erro HTTP não expõem stack nem mensagens internas (`ErroHttp` ou "Erro interno").
 
 ## Decisões de arquitetura
