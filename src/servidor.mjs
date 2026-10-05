@@ -17,10 +17,39 @@ const MB = 1024 * 1024;
 const lista = (valor) =>
   (valor ?? "").split(",").map((item) => item.trim()).filter(Boolean);
 
+const semAspas = (valor) => valor.replace(/^["']|["']$/g, "");
+
+/** Aceita com ou sem protocolo, barra final ou caminho: só o host (com porta, se houver) é comparado. */
+function paraHost(entrada) {
+  const valor = semAspas(entrada);
+  return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(valor) ? valor : `http://${valor}`).host;
+}
+
+/** O browser manda Origin sem barra nem caminho. Sem protocolo não dá para saber se é http ou https. */
+function paraOrigem(entrada) {
+  const valor = semAspas(entrada);
+  if (!/^https?:\/\//i.test(valor)) throw new Error("origem sem http:// ou https://");
+  return new URL(valor).origin;
+}
+
+/** Valor que não dá para interpretar derruba a subida: melhor do que recusar requisições sem explicar. */
+function lerConjunto(variavel, converter) {
+  return new Set(
+    lista(process.env[variavel]).map((item) => {
+      try {
+        return converter(item);
+      } catch {
+        console.error(`${variavel}: valor inválido "${item}"`);
+        process.exit(1);
+      }
+    }),
+  );
+}
+
 const PORTA = Number(process.env.PORT ?? 3000);
 const SEGREDOS = lista(process.env.SEGREDOS_TOKEN);
-const ORIGENS = new Set(lista(process.env.CORS_ORIGENS));
-const DESTINOS = new Set(lista(process.env.DESTINOS_PERMITIDOS));
+const ORIGENS = lerConjunto("CORS_ORIGENS", paraOrigem);
+const DESTINOS = lerConjunto("DESTINOS_PERMITIDOS", paraHost);
 const TAMANHO_MAXIMO = Number(process.env.TAMANHO_MAXIMO_MB ?? 100) * MB;
 const RETENCAO_MS = Number(process.env.RETENCAO_MINUTOS ?? 60) * 60 * 1000;
 
@@ -73,7 +102,8 @@ function validarDestino(destinoUrl) {
   } catch {
     throw new ErroHttp(400, "destino_url inválida");
   }
-  if (!DESTINOS.has(host)) throw new ErroHttp(400, "Destino não permitido");
+  // O host não é segredo (quem chamou gerou a URL) e mostrá-lo encurta o diagnóstico de configuração.
+  if (!DESTINOS.has(host)) throw new ErroHttp(400, `Destino não permitido: ${host}`);
   return destinoUrl;
 }
 
