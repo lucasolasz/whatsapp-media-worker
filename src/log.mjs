@@ -2,7 +2,7 @@ const MB = 1024 * 1024;
 
 /**
  * Uma linha por etapa, sempre com o id curto da conversão na frente: dá para
- * seguir um envio do upload ao bucket. Nunca token, segredo nem URL assinada.
+ * seguir uma conversão do recebimento ao destino. Nunca token, segredo nem URL assinada.
  */
 export function registrar(id, mensagem) {
   console.info(`[${id.slice(0, 8)}] ${mensagem}`);

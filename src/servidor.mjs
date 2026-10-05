@@ -109,7 +109,7 @@ function validarDestino(destinoUrl) {
   return destinoUrl;
 }
 
-/** `recebimento.bytes` acompanha o que chegou, para o log dizer onde um upload parou. */
+/** `recebimento.bytes` acompanha o que chegou, para o log dizer onde o recebimento parou. */
 async function receberArquivo(requisicao, destino, limite, recebimento) {
   if (Number(requisicao.headers["content-length"]) > limite) {
     throw new ErroHttp(413, `Arquivo acima de ${Math.floor(limite / MB)} MB`);
@@ -142,7 +142,7 @@ async function criarConversao(requisicao, resposta) {
   const inicio = Date.now();
   registrar(
     id,
-    `upload iniciado: ${contentType}, ${emMb(declarados)} declarados, origem ${requisicao.headers.origin ?? "sem Origin"}`,
+    `recebendo arquivo: ${contentType}, ${emMb(declarados)}`,
   );
 
   const pasta = await mkdtemp(join(tmpdir(), "conversao-"));
@@ -153,10 +153,10 @@ async function criarConversao(requisicao, resposta) {
   } catch (erro) {
     await rm(pasta, { recursive: true, force: true });
     if (erro instanceof ErroHttp) throw erro;
-    // Conexão caiu no meio (rede, proxy, aba fechada): não há a quem responder, só registrar onde parou.
+    // Conexão caiu no meio do recebimento: não há a quem responder, só registrar onde parou.
     registrar(
       id,
-      `upload interrompido: ${emMb(recebimento.bytes)} de ${emMb(declarados)} em ${emSegundos(segundosDesde(inicio))} (${erro.code ?? erro.message})`,
+      `recebimento interrompido: ${emMb(recebimento.bytes)} de ${emMb(declarados)} em ${emSegundos(segundosDesde(inicio))} (${erro.code ?? erro.message})`,
     );
     return;
   }
@@ -164,7 +164,7 @@ async function criarConversao(requisicao, resposta) {
   const duracao = segundosDesde(inicio);
   registrar(
     id,
-    `upload recebido: ${emMb(recebimento.bytes)} em ${emSegundos(duracao)} (${velocidade(recebimento.bytes, duracao)})`,
+    `arquivo recebido: ${emMb(recebimento.bytes)} em ${emSegundos(duracao)} (${velocidade(recebimento.bytes, duracao)})`,
   );
 
   const conversao = registrarConversao({
