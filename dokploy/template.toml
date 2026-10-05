@@ -1,0 +1,16 @@
+[variables]
+main_domain = "${domain}"
+
+[config]
+env = [
+  "SEGREDOS_TOKEN=${password:64}",
+  "CORS_ORIGENS=https://ltech-automate-dashboard.vercel.app,http://localhost:3000",
+  "DESTINOS_PERMITIDOS=s3.seudominio.com",
+  "TAMANHO_MAXIMO_MB=100",
+  "RETENCAO_MINUTOS=60",
+]
+
+[[config.domains]]
+serviceName = "whatsapp-media-worker"
+port = 3000
+host = "${main_domain}"

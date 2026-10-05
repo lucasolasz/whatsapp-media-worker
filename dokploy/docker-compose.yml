@@ -1,0 +1,18 @@
+services:
+  whatsapp-media-worker:
+    # O Docker clona o repositório público e builda o Dockerfile: não precisa publicar imagem.
+    build:
+      context: https://github.com/lucasolasz/whatsapp-media-worker.git#main
+    restart: unless-stopped
+    expose:
+      - 3000
+    environment:
+      - SEGREDOS_TOKEN=${SEGREDOS_TOKEN}
+      - CORS_ORIGENS=${CORS_ORIGENS}
+      - DESTINOS_PERMITIDOS=${DESTINOS_PERMITIDOS}
+      - TAMANHO_MAXIMO_MB=${TAMANHO_MAXIMO_MB}
+      - RETENCAO_MINUTOS=${RETENCAO_MINUTOS}
+    deploy:
+      resources:
+        limits:
+          memory: 1G

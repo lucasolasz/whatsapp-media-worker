@@ -75,8 +75,8 @@ const token = `${payload}.${createHmac("sha256", segredo).update(payload).digest
 | Variável | Padrão | Uso |
 |---|---|---|
 | `SEGREDOS_TOKEN` | obrigatória | Segredos aceitos, separados por vírgula: um por app cliente, ou o antigo e o novo durante uma troca. Cada um precisa ter 32+ caracteres, senão o worker não sobe |
-| `CORS_ORIGENS` | vazio | Origens de browser liberadas (ex.: `https://app.vercel.app,http://localhost:3000`) |
-| `DESTINOS_PERMITIDOS` | vazio | Hosts aceitos em `destino_url` (ex.: `s3.seudominio.com`). Vazio desliga o modo destino |
+| `CORS_ORIGENS` | vazio | Origens de browser liberadas (ex.: `https://app.vercel.app,http://localhost:3000`). Precisa do `http://` ou `https://`; barra final, caminho e aspas são ignorados |
+| `DESTINOS_PERMITIDOS` | vazio | Hosts aceitos em `destino_url` (ex.: `s3.seudominio.com`). Pode vir com ou sem protocolo, barra final ou caminho: só o host (e a porta, se não for a padrão) é comparado. Vazio desliga o modo destino |
 | `TAMANHO_MAXIMO_MB` | `100` | Limite do arquivo de entrada |
 | `RETENCAO_MINUTOS` | `60` | Tempo que um resultado não baixado fica no worker |
 | `PORT` | `3000` | Porta HTTP |
@@ -97,6 +97,21 @@ O arquivo `easypanel-schema.json` cria o serviço já configurado. O Easypanel c
 O deploy automático a cada push vem desligado (`autoDeploy: false`): clique em **Deploy** depois de atualizar o código, ou ligue no serviço. Um redeploy no meio de uma conversão a perde, e quem chamou precisa enviar de novo.
 
 Se uploads grandes caírem perto de 60 s, aumente o `readTimeout` do Traefik. Na v3 o padrão é 60 s para ler a requisição inteira.
+
+## Deploy no Dokploy
+
+A pasta `dokploy/` tem um template no formato do [Dokploy/templates](https://github.com/Dokploy/templates): `docker-compose.yml` e `template.toml`. O compose builda direto do repositório (`build.context` com a URL do Git), então o repositório precisa ser público. Não é preciso abrir PR no repositório de templates: ele é para templates públicos, e este é importado direto no painel.
+
+1. Gere o valor de importação (JSON com `compose` e `config`, em base64):
+   ```
+   node -e "const f=require('fs');console.log(Buffer.from(JSON.stringify({compose:f.readFileSync('dokploy/docker-compose.yml','utf8'),config:f.readFileSync('dokploy/template.toml','utf8')})).toString('base64'))"
+   ```
+2. No projeto do Dokploy: **Create Service → Compose**, abra o serviço e, em **Advanced → Import**, cole o base64 e confirme.
+3. Em **Environment**, troque `CORS_ORIGENS` e `DESTINOS_PERMITIDOS`. O `SEGREDOS_TOKEN` já vem aleatório com 64 caracteres: copie-o para o `MEDIA_WORKER_SEGREDO` do cliente.
+4. Em **Domains**, troque o domínio gerado pelo definitivo (porta 3000, HTTPS).
+5. Clique em **Deploy** e confira `GET https://<dominio>/saude`.
+
+O compose limita a memória em 1 GB. Para limitar CPU, adicione `cpus: "1.5"` em `deploy.resources.limits`, sem passar do número de núcleos da máquina. Não há deploy automático: um push só entra com um novo **Deploy**, que perde as conversões em andamento.
 
 ### Sem Easypanel
 

@@ -10,6 +10,7 @@ Primeiro cliente: a dashboard **ltech-automate-dashboard** (pasta irmã `../ltec
 - Dependências: só `sharp` (imagem). Vídeo usa `ffmpeg`/`ffprobe` do sistema (`apk add ffmpeg` no `Dockerfile`).
 - HTTP com `node:http`, sem framework. Antes de adicionar uma dependência, verificar se a biblioteca padrão resolve.
 - Deploy: container no Easypanel (Contabo) pelo `easypanel-schema.json` (origem GitHub + `Dockerfile`, `autoDeploy: false`). A mesma máquina roda WAHA e n8n.
+- Alternativa: template do Dokploy em `dokploy/` (`docker-compose.yml` que builda pela URL do Git + `template.toml`), importado em base64 no painel. Mudança de variável ou porta vale para os dois arquivos de deploy.
 
 ## Estrutura
 
@@ -49,6 +50,7 @@ Sempre atualizar o `README.md`.
 - Cada segredo de `SEGREDOS_TOKEN` precisa de 32+ caracteres. Com segredo curto ou com o placeholder do schema, o worker não sobe.
 - `destino_url` vem dentro do token assinado. `DESTINOS_PERMITIDOS` é a segunda barreira contra SSRF; vazio desliga o modo destino.
 - CORS só ecoa origens de `CORS_ORIGENS`.
+- `CORS_ORIGENS` e `DESTINOS_PERMITIDOS` são normalizados ao subir (`paraOrigem` e `paraHost` em `servidor.mjs`), porque `https://` ou `/` no final já quebraram a configuração. Valor que não dá para interpretar derruba a subida com a variável e o valor no log. A recusa de destino informa o host recusado.
 - **Logs:** só id da conversão, tempos e o fim do stderr do ffmpeg. Nunca token, segredo, `destino_url` (tem assinatura) nem conteúdo de arquivo.
 - Respostas de erro HTTP não expõem stack nem mensagens internas (`ErroHttp` ou "Erro interno").
 
