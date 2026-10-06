@@ -16,7 +16,7 @@
           "type": "dockerfile",
           "file": "Dockerfile"
         },
-        "env": "SEGREDOS_TOKEN=GERE_UM_SEGREDO\nCORS_ORIGENS=https://ltech-automate-dashboard.vercel.app,http://localhost:3000\nDESTINOS_PERMITIDOS=s3.seudominio.com\nTAMANHO_MAXIMO_MB=100\nRETENCAO_MINUTOS=60",
+        "env": "SEGREDOS_TOKEN=GERE_UM_SEGREDO\nCORS_ORIGENS=https://ltech-automate-dashboard.vercel.app,http://localhost:3000\nDESTINOS_PERMITIDOS=s3.seudominio.com\nTAMANHO_MAXIMO_MB=100\nRETENCAO_MINUTOS=60\nTZ=America/Sao_Paulo",
         "domains": [
           {
             "host": "$(EASYPANEL_DOMAIN)",

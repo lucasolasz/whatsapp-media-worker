@@ -4,30 +4,44 @@ const MB = 1024 * 1024;
  * Uma linha por etapa, sempre com o id curto da conversão na frente: dá para
  * seguir uma conversão do recebimento ao destino. Nunca token, segredo nem URL assinada.
  */
-export function registrar(id, mensagem) {
-  log("info", `[${id.slice(0, 8)}] ${mensagem}`);
+export function registrar(id, mensagem, nivel = "info") {
+  log(nivel, `[${id.slice(0, 8)}] ${mensagem}`);
 }
 
 export function registrarFalha(id, mensagem, erro) {
   log("error", `[${id.slice(0, 8)}] ${mensagem}`, erro);
 }
 
-/** sv-SE formata como "2026-10-06 09:15:02". O container roda em UTC; o horário que importa é o de Brasília. */
-const formatoData = new Intl.DateTimeFormat("sv-SE", {
-  timeZone: "America/Sao_Paulo",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-});
+const doisDigitos = (numero) => String(numero).padStart(2, "0");
 
-/** Toda linha de log passa por aqui, para sair com data e hora. */
+/**
+ * Hora local com o deslocamento ("2026-10-06T09:15:02-03:00"): o fuso vem da variável
+ * TZ do deploy, e o deslocamento permite cruzar com logs em UTC (Traefik, WAHA, n8n).
+ */
+function dataHora(data) {
+  const deslocamento = -data.getTimezoneOffset();
+  const local = new Date(data.getTime() + deslocamento * 60_000).toISOString().slice(0, 19);
+  const minutos = Math.abs(deslocamento);
+  return `${local}${deslocamento < 0 ? "-" : "+"}${doisDigitos(Math.floor(minutos / 60))}:${doisDigitos(minutos % 60)}`;
+}
+
+/** Mensagem do erro seguida das causas, como "Não foi possível ler o vídeo ← ffprobe falhou (1): …". */
+function descreverErro(erro) {
+  const partes = [];
+  for (let atual = erro; atual != null; atual = atual.cause) {
+    partes.push(String(atual.message ?? atual).trim());
+  }
+  return partes.join(" ← ");
+}
+
+/**
+ * Toda linha que o worker escreve passa por aqui, com data e hora. Quebras de linha
+ * (stderr do ffmpeg, stack) viram " | " para cada chamada continuar sendo uma linha só.
+ * Exceções não tratadas o Node escreve direto, sem passar por aqui.
+ */
 export function log(nivel, mensagem, erro) {
-  const linha = `${formatoData.format(new Date())} ${mensagem}`;
-  if (erro === undefined) console[nivel](linha);
-  else console[nivel](linha, erro);
+  const detalhe = erro == null ? "" : ` ${descreverErro(erro)}`;
+  console[nivel](`${dataHora(new Date())} ${mensagem}${detalhe}`.replace(/\s*\n\s*/g, " | "));
 }
 
 export const emMb = (bytes) =>

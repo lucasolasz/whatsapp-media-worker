@@ -80,6 +80,7 @@ const token = `${payload}.${createHmac("sha256", segredo).update(payload).digest
 | `TAMANHO_MAXIMO_MB` | `100` | Limite do arquivo de entrada |
 | `RETENCAO_MINUTOS` | `60` | Tempo que um resultado não baixado fica no worker |
 | `PORT` | `3000` | Porta HTTP |
+| `TZ` | UTC | Fuso do horário nos logs (ex.: `America/Sao_Paulo`). Os templates de deploy já vêm com `America/Sao_Paulo` |
 
 ## Deploy no Easypanel
 
@@ -124,6 +125,7 @@ docker run -d -p 3000:3000 --env-file .env whatsapp-media-worker
 
 - O estado fica em memória. Um restart perde as conversões em andamento: o status responde 404 e quem chamou envia de novo.
 - Os logs mostram o id da conversão, o tempo gasto e o fim do stderr do ffmpeg quando há falha. Não mostram tokens nem conteúdo de arquivos.
+- Cada linha começa com data e hora no fuso de `TZ`, com o deslocamento (`2026-10-06T09:15:02-03:00`), e cada evento ocupa uma linha só.
 
 ## Desenvolvimento
 

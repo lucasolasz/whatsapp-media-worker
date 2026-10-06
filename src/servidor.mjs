@@ -152,7 +152,11 @@ async function criarConversao(requisicao, resposta) {
     await receberArquivo(requisicao, entrada, limite, recebimento);
   } catch (erro) {
     await rm(pasta, { recursive: true, force: true });
-    if (erro instanceof ErroHttp) throw erro;
+    if (erro instanceof ErroHttp) {
+      // A recusa sai no log com o id já anunciado em "recebendo arquivo".
+      erro.idConversao = id;
+      throw erro;
+    }
     // Conexão caiu no meio do recebimento: não há a quem responder, só registrar onde parou.
     registrar(
       id,
@@ -217,9 +221,11 @@ const servidor = createServer(async (requisicao, resposta) => {
     }
   } catch (erro) {
     if (erro instanceof ErroHttp) {
-      log("warn", `recusado ${requisicao.method} ${requisicao.url.split("?")[0]}: ${erro.status} ${erro.message}`);
+      const recusa = `recusado ${requisicao.method} ${requisicao.url.split("?")[0]}: ${erro.status} ${erro.message}`;
+      if (erro.idConversao) registrar(erro.idConversao, recusa, "warn");
+      else log("warn", recusa);
     } else {
-      log("error", "Erro inesperado:", erro);
+      log("error", "Erro inesperado:", erro?.stack ?? erro);
     }
     // Upload acima do limite derruba a conexão: aí não há mais a quem responder.
     if (!resposta.headersSent && !requisicao.socket.destroyed) {

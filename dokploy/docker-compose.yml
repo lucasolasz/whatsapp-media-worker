@@ -12,6 +12,7 @@ services:
       - DESTINOS_PERMITIDOS=${DESTINOS_PERMITIDOS}
       - TAMANHO_MAXIMO_MB=${TAMANHO_MAXIMO_MB}
       - RETENCAO_MINUTOS=${RETENCAO_MINUTOS}
+      - TZ=${TZ}
     deploy:
       resources:
         limits:

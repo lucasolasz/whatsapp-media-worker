@@ -8,6 +8,7 @@ env = [
   "DESTINOS_PERMITIDOS=s3.seudominio.com",
   "TAMANHO_MAXIMO_MB=100",
   "RETENCAO_MINUTOS=60",
+  "TZ=America/Sao_Paulo",
 ]
 
 [[config.domains]]
