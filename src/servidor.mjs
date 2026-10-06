@@ -12,7 +12,7 @@ import {
   registrarConversao,
   resumoConversao,
 } from "./conversoes.mjs";
-import { emMb, emSegundos, registrar, segundosDesde, velocidade } from "./log.mjs";
+import { emMb, emSegundos, log, registrar, segundosDesde, velocidade } from "./log.mjs";
 import { verificarToken } from "./token.mjs";
 
 const MB = 1024 * 1024;
@@ -41,7 +41,7 @@ function lerConjunto(variavel, converter) {
       try {
         return converter(item);
       } catch {
-        console.error(`${variavel}: valor inválido "${item}"`);
+        log("error", `${variavel}: valor inválido "${item}"`);
         process.exit(1);
       }
     }),
@@ -59,7 +59,7 @@ const TAMANHO_MINIMO_SEGREDO = 32;
 
 // Segredo curto ou o placeholder do template deixaria qualquer um gerar tokens.
 if (!SEGREDOS.length || SEGREDOS.some((segredo) => segredo.length < TAMANHO_MINIMO_SEGREDO)) {
-  console.error(`SEGREDOS_TOKEN precisa de ao menos um segredo, cada um com ${TAMANHO_MINIMO_SEGREDO}+ caracteres`);
+  log("error", `SEGREDOS_TOKEN precisa de ao menos um segredo, cada um com ${TAMANHO_MINIMO_SEGREDO}+ caracteres`);
   process.exit(1);
 }
 
@@ -217,9 +217,9 @@ const servidor = createServer(async (requisicao, resposta) => {
     }
   } catch (erro) {
     if (erro instanceof ErroHttp) {
-      console.warn(`recusado ${requisicao.method} ${requisicao.url.split("?")[0]}: ${erro.status} ${erro.message}`);
+      log("warn", `recusado ${requisicao.method} ${requisicao.url.split("?")[0]}: ${erro.status} ${erro.message}`);
     } else {
-      console.error("Erro inesperado:", erro);
+      log("error", "Erro inesperado:", erro);
     }
     // Upload acima do limite derruba a conexão: aí não há mais a quem responder.
     if (!resposta.headersSent && !requisicao.socket.destroyed) {
@@ -232,10 +232,10 @@ const servidor = createServer(async (requisicao, resposta) => {
 
 // Upload de dezenas de MB em rede móvel passa fácil dos 5 min padrão do Node.
 servidor.requestTimeout = 30 * 60 * 1000;
-servidor.listen(PORTA, () => console.info(`whatsapp-media-worker ouvindo na porta ${PORTA}`));
+servidor.listen(PORTA, () => log("info", `whatsapp-media-worker ouvindo na porta ${PORTA}`));
 
 setInterval(() => {
   const agora = Date.now() / 1000;
   for (const [jti, exp] of tokensUsados) if (exp < agora) tokensUsados.delete(jti);
-  limparAntigas(RETENCAO_MS).catch((erro) => console.error("Falha na limpeza:", erro));
+  limparAntigas(RETENCAO_MS).catch((erro) => log("error", "Falha na limpeza:", erro));
 }, 5 * 60 * 1000).unref();
